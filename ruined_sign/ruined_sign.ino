@@ -10,7 +10,7 @@
 
 #define NUM_LETTERS 6
 #define MIN_RELAY_DELAY 20  // Minimum time (ms) between relay state changes
-#define NUM_ANIMATIONS 6    // Updated to 6 animations
+#define NUM_ANIMATIONS 7
 
 int letterPins[NUM_LETTERS] = {R_PIN, U_PIN, I_PIN, N_PIN, E_PIN, D_PIN};
 const char* letters[NUM_LETTERS] = {"R", "U", "I", "N", "E", "D"};
@@ -36,6 +36,7 @@ void setup() {
   Serial.println("4: Sparkle");
   Serial.println("5: Chase");
   Serial.println("6: Pulse");
+  Serial.println("7: Spell (U RUIN. I RUIN. U R RUIN D)");
   
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   for (int i = 0; i < NUM_LETTERS; i++) {
@@ -68,6 +69,9 @@ void loop() {
       break;
     case 6:
       pulseAnimation();
+      break;
+    case 7:
+      spellAnimation();
       break;
   }
 }
@@ -338,6 +342,85 @@ void pulseAnimation() {
   }
 }
 
+// Spell timing (ms)
+#define SPELL_WORD_ON 900      // How long each word stays lit
+#define SPELL_WORD_GAP 300     // Dark gap between words
+#define SPELL_SENTENCE_GAP 1000 // Dark pause at each full stop
+#define SPELL_E_DELAY 1000     // Pause after "D" before the E glitches
+#define SPELL_HOLD 15000       // All on before starting over
+
+// Words to spell, as letters of RUINED. An empty string marks a full stop.
+const char* spellWords[] = {
+  "U", "RUIN", "",
+  "I", "RUIN", "",
+  "U", "R", "RUIN", "D"
+};
+#define NUM_SPELL_WORDS (sizeof(spellWords) / sizeof(spellWords[0]))
+
+// Wait while still watching the button and serial; returns false if the animation changed
+bool spellWait(unsigned long ms) {
+  unsigned long start = millis();
+  while (millis() - start < ms) {
+    checkButton();
+    checkSerial();
+    if (currentAnimation != 7) {
+      allOff();
+      return false;
+    }
+    delay(10);
+  }
+  return true;
+}
+
+// Light only the letters in word (e.g. "RUIN")
+void showWord(const char* word) {
+  for (int i = 0; i < NUM_LETTERS; i++) {
+    bool lit = strchr(word, letters[i][0]) != NULL;
+    setRelayState(i, lit ? LOW : HIGH);
+  }
+  printRuinedState();
+}
+
+void spellAnimation() {
+  Serial.println("\n=== SPELL ANIMATION ===");
+
+  while (true) {
+    allOff();
+    if (!spellWait(SPELL_SENTENCE_GAP)) return;
+
+    for (unsigned int w = 0; w < NUM_SPELL_WORDS; w++) {
+      if (spellWords[w][0] == '\0') {  // Full stop
+        if (!spellWait(SPELL_SENTENCE_GAP - SPELL_WORD_GAP)) return;
+        continue;
+      }
+      Serial.println(spellWords[w]);
+      showWord(spellWords[w]);
+      if (!spellWait(SPELL_WORD_ON)) return;
+      allOff();
+      if (!spellWait(SPELL_WORD_GAP)) return;
+    }
+
+    if (!spellWait(SPELL_E_DELAY)) return;
+
+    // Light everything but E, then glitch the E like a failing tube
+    showWord("RUIND");
+    if (!spellWait(150)) return;
+    int glitches = random(6, 11);
+    for (int i = 0; i < glitches; i++) {
+      setRelayState(4, LOW);  // E on
+      printRuinedState();
+      if (!spellWait(random(30, 120))) return;
+      setRelayState(4, HIGH);  // E off
+      printRuinedState();
+      if (!spellWait(random(40, 250))) return;
+    }
+
+    // E catches and the whole sign stays on
+    allOn();
+    if (!spellWait(SPELL_HOLD)) return;
+  }
+}
+
 void checkButton() {
   int reading = digitalRead(BUTTON_PIN);
   
@@ -360,7 +443,7 @@ void checkButton() {
 void checkSerial() {
   if (Serial.available() > 0) {
     char command = Serial.read();
-    if (command >= '1' && command <= '6') {
+    if (command >= '1' && command <= '7') {
       currentAnimation = command - '0';
       printCurrentAnimation();
     }
@@ -387,6 +470,9 @@ void printCurrentAnimation() {
       break;
     case 6:
       Serial.println("Now playing: PULSE ANIMATION");
+      break;
+    case 7:
+      Serial.println("Now playing: SPELL ANIMATION");
       break;
   }
   Serial.println("=====================\n");
