@@ -347,10 +347,10 @@ void pulseAnimation() {
 #define SPELL_WORD_GAP 300      // Dark gap between words
 #define SPELL_SENTENCE_GAP 1000 // Dark pause at each full stop
 #define SPELL_E_DELAY 1000      // RUIND alone before the E glitches
-#define SPELL_HOLD 15000        // RUIND stays lit this long before starting over
+#define SPELL_HOLD 15000        // All on this long before starting over
 
 // Words to spell, as letters of RUINED. An empty string marks a full stop.
-// The last word stays lit for the glitch and the hold.
+// The last word stays lit while the E glitches.
 const char* spellWords[] = {
   "U", "RUIN", "",
   "I", "RUIN", "",
@@ -415,7 +415,9 @@ void spellAnimation() {
       if (!spellWait(random(25, 70))) return;
     }
 
-    // E dies and RUIND stays lit until the cycle restarts
+    // E catches and the whole sign stays lit until the cycle restarts
+    setRelayState(4, LOW);
+    printRuinedState();
     if (!spellWait(SPELL_HOLD)) return;
   }
 }
