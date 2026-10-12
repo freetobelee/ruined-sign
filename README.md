@@ -20,13 +20,15 @@ The relays are driven **active-low**: `LOW` turns a letter on and `HIGH` turns i
 
 Press the button to step to the next animation, or send a digit over serial at 9600 baud:
 
-1. Bounce
+1. Bounce: the lit bar is a ball under gravity. It drops from the full sign, rebounds a little lower and quicker each time, and settles dark before starting over
 2. Flicker (E and D flicker at random like a failing sign)
 3. Sequential
 4. Sparkle
 5. Chase
 6. Pulse
 7. Spell: lights the letters to spell out "U RUIN. I RUIN. U R RUIND". RUIND stays lit, the E glitches rapidly and then catches, and the whole sign holds for 15 seconds before starting over
+8. RID / UN: flashes between RID and UN with a short dark beat between them
+9. Pendulum: one lit letter swings across the sign like a damped pendulum, lingering at the ends and rushing through the middle, until it settles on IN and gets pushed again
 
 The serial monitor also prints the sign's state as it changes, with lit letters in uppercase (for example `RUInED`).
 
