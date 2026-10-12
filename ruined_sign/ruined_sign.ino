@@ -277,31 +277,29 @@ void fallAndBounce() {
   }
 }
 
+// Sparkle timing (ms). Each blink and each gap gets a random length.
+#define SPARKLE_OFF_MIN 40   // Letters dark for 40-70 ms (avg 55)
+#define SPARKLE_OFF_MAX 70
+#define SPARKLE_ON_MIN 90    // Then all lit for 90-350 ms (avg 220)
+#define SPARKLE_ON_MAX 350
+
 void sparkleAnimation() {
   Serial.println("\n=== SPARKLE ANIMATION ===");
-  
-  allOn();  // Start with all letters on
-  
+
+  showMask(0x3F);  // Start with all letters on
+
   while (true) {
-    // Pick 1-3 random letters to sparkle
+    // Blink 1-3 random letters off
+    uint8_t mask = 0x3F;
     int numSparkles = random(1, 4);
     for (int i = 0; i < numSparkles; i++) {
-      int letterIndex = random(0, NUM_LETTERS);
-      setRelayState(letterIndex, HIGH);
+      mask &= ~(1 << random(0, NUM_LETTERS));
     }
-    printRuinedState();
-    delay(50);
-    
-    allOn();
-    printRuinedState();
-    delay(random(100, 300));
-    
-    checkButton();
-    checkSerial();
-    if (currentAnimation != 4) {
-      allOff();
-      return;
-    }
+    showMask(mask);
+    if (!effectWait(random(SPARKLE_OFF_MIN, SPARKLE_OFF_MAX + 1), 4)) return;
+
+    showMask(0x3F);
+    if (!effectWait(random(SPARKLE_ON_MIN, SPARKLE_ON_MAX + 1), 4)) return;
   }
 }
 

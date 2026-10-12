@@ -23,7 +23,7 @@ Press the button to step to the next animation, or send a digit over serial at 9
 1. Bounce: the lit bar is a ball under gravity. It drops from the full sign, rebounds a little lower and quicker each time, and settles dark before starting over
 2. Flicker (E and D flicker at random like a failing sign)
 3. Sequential
-4. Sparkle
+4. Sparkle: 1 to 3 random letters blink off, with randomised blink and gap lengths
 5. Chase
 6. Pulse
 7. Spell: lights the letters to spell out "U RUIN. I RUIN. U R RUIND". RUIND stays lit, the E glitches rapidly and then catches, and the whole sign holds for 15 seconds before starting over
