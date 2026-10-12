@@ -36,7 +36,7 @@ void setup() {
   Serial.println("5: Chase");
   Serial.println("6: Pulse");
   Serial.println("7: Spell (U RUIN. I RUIN. U R RUIND)");
-  Serial.println("8: RID / UN");
+  Serial.println("8: RIE / UND");
   Serial.println("9: Pendulum");
   
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -75,7 +75,7 @@ void loop() {
       spellAnimation();
       break;
     case 8:
-      ridUnAnimation();
+      rieUndAnimation();
       break;
     case 9:
       pendulumAnimation();
@@ -460,26 +460,26 @@ void spellAnimation() {
   }
 }
 
-// RID / UN flash timing (ms)
-#define RIDUN_ON 600   // How long each word stays lit
-#define RIDUN_GAP 120  // Dark beat between words
+// RIE / UND flash timing (ms)
+#define RIEUND_ON 545   // How long each half stays lit
+#define RIEUND_GAP 110  // Dark beat between halves
 
-#define MASK_RID 0x25  // R, I, D
-#define MASK_UN  0x0A  // U, N
+#define MASK_RIE 0x15  // R, I, E
+#define MASK_UND 0x2A  // U, N, D
 
-// Alternates between RID and UN with a short dark beat between them
-void ridUnAnimation() {
-  Serial.println("\n=== RID / UN ANIMATION ===");
+// Alternates between RIE and UND with a short dark beat between them
+void rieUndAnimation() {
+  Serial.println("\n=== RIE / UND ANIMATION ===");
 
   while (true) {
-    showMask(MASK_RID);
-    if (!effectWait(RIDUN_ON, 8)) return;
+    showMask(MASK_RIE);
+    if (!effectWait(RIEUND_ON, 8)) return;
     showMask(0);
-    if (!effectWait(RIDUN_GAP, 8)) return;
-    showMask(MASK_UN);
-    if (!effectWait(RIDUN_ON, 8)) return;
+    if (!effectWait(RIEUND_GAP, 8)) return;
+    showMask(MASK_UND);
+    if (!effectWait(RIEUND_ON, 8)) return;
     showMask(0);
-    if (!effectWait(RIDUN_GAP, 8)) return;
+    if (!effectWait(RIEUND_GAP, 8)) return;
   }
 }
 
@@ -575,7 +575,7 @@ void printCurrentAnimation() {
       Serial.println("Now playing: SPELL ANIMATION");
       break;
     case 8:
-      Serial.println("Now playing: RID / UN ANIMATION");
+      Serial.println("Now playing: RIE / UND ANIMATION");
       break;
     case 9:
       Serial.println("Now playing: PENDULUM ANIMATION");
