@@ -36,7 +36,7 @@ void setup() {
   Serial.println("4: Sparkle");
   Serial.println("5: Chase");
   Serial.println("6: Pulse");
-  Serial.println("7: Spell (U RUIN. I RUIN. U R RUIN D)");
+  Serial.println("7: Spell (U RUIN. I RUIN. U R RUIND)");
   
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   for (int i = 0; i < NUM_LETTERS; i++) {
@@ -343,17 +343,18 @@ void pulseAnimation() {
 }
 
 // Spell timing (ms)
-#define SPELL_WORD_ON 900      // How long each word stays lit
-#define SPELL_WORD_GAP 300     // Dark gap between words
+#define SPELL_WORD_ON 900       // How long each word stays lit
+#define SPELL_WORD_GAP 300      // Dark gap between words
 #define SPELL_SENTENCE_GAP 1000 // Dark pause at each full stop
-#define SPELL_E_DELAY 1000     // Pause after "D" before the E glitches
-#define SPELL_HOLD 15000       // All on before starting over
+#define SPELL_E_DELAY 1000      // RUIND alone before the E glitches
+#define SPELL_HOLD 15000        // RUIND stays lit this long before starting over
 
 // Words to spell, as letters of RUINED. An empty string marks a full stop.
+// The last word stays lit for the glitch and the hold.
 const char* spellWords[] = {
   "U", "RUIN", "",
   "I", "RUIN", "",
-  "U", "R", "RUIN", "D"
+  "U", "R", "RUIND"
 };
 #define NUM_SPELL_WORDS (sizeof(spellWords) / sizeof(spellWords[0]))
 
@@ -396,27 +397,25 @@ void spellAnimation() {
       Serial.println(spellWords[w]);
       showWord(spellWords[w]);
       if (!spellWait(SPELL_WORD_ON)) return;
+      if (w == NUM_SPELL_WORDS - 1) break;  // Last word stays lit
       allOff();
       if (!spellWait(SPELL_WORD_GAP)) return;
     }
 
-    if (!spellWait(SPELL_E_DELAY)) return;
+    if (!spellWait(SPELL_E_DELAY - SPELL_WORD_ON)) return;
 
-    // Light everything but E, then glitch the E like a failing tube
-    showWord("RUIND");
-    if (!spellWait(150)) return;
-    int glitches = random(6, 11);
+    // Quick, nervous E glitch, kept above the relay's 20 ms minimum
+    int glitches = random(10, 16);
     for (int i = 0; i < glitches; i++) {
       setRelayState(4, LOW);  // E on
       printRuinedState();
-      if (!spellWait(random(30, 120))) return;
+      if (!spellWait(random(25, 50))) return;
       setRelayState(4, HIGH);  // E off
       printRuinedState();
-      if (!spellWait(random(40, 250))) return;
+      if (!spellWait(random(25, 70))) return;
     }
 
-    // E catches and the whole sign stays on
-    allOn();
+    // E dies and RUIND stays lit until the cycle restarts
     if (!spellWait(SPELL_HOLD)) return;
   }
 }
