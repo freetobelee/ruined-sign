@@ -20,7 +20,7 @@ The relays are driven **active-low**: `LOW` turns a letter on and `HIGH` turns i
 
 Press the button to step to the next animation, or send a digit over serial at 9600 baud:
 
-1. Bounce: starts dark, then a ball falls from R to D under gravity, lighting letters as it drops. It rebounds toward R a little lower and quicker each time and settles with the whole sign lit before starting over
+1. Bounce: starts dark, then a ball falls from R to D under gravity, lighting letters as it drops and rebounding toward R a little lower and quicker each time. Once the whole sign is lit it pauses, then a second ball bounces through from R to D the same way, turning the letters off
 2. Flicker (E and D flicker at random like a failing sign)
 3. Sequential
 4. Sparkle: 1 to 3 random letters blink off, with randomised blink and gap lengths

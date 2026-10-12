@@ -224,57 +224,65 @@ void showMask(uint8_t mask) {
   if (changed) printRuinedState();
 }
 
-// Bounce timing. Heights are in letters above the floor; the floor is the fully lit sign.
+// Bounce timing. Heights are in letters above the floor at D.
 #define BOUNCE_GRAVITY 12.0      // letters/s^2, so the first drop takes 1 s
 #define BOUNCE_RESTITUTION 0.72  // Fraction of speed kept on each bounce
-#define BOUNCE_MIN_PEAK 0.5      // Stop once a bounce would not light a letter
+#define BOUNCE_MIN_PEAK 0.5      // Stop once a bounce would not change a letter
 #define BOUNCE_HOLD_DARK 1200    // Dark sign before the drop (ms)
-#define BOUNCE_HOLD_LIT 2000     // Full sign after it settles (ms)
+#define BOUNCE_HOLD_LIT 2000     // Full sign between the two drops (ms)
 #define BOUNCE_TICK 10           // Physics step (ms)
 
-// The edge of the lit bar is a ball falling from R toward D. The sign starts
-// dark, the ball drops under gravity lighting letters from R as it falls,
-// and loses speed on every bounce off D, so each hop back toward R is lower
-// and quicker. It moves fastest near the floor, hangs at the top of each arc
-// and settles with the whole sign lit.
+// One drop: a ball falls from R toward D under gravity and loses speed on
+// every bounce off D, so each hop back toward R is lower and quicker. It
+// moves fastest near the floor and hangs at the top of each arc. The letters
+// the ball has passed (from R up to its position) are lit when lighting is
+// true, or dark when it is false. Returns false if the animation changed.
+bool bounceDrop(bool lighting) {
+  // Each arc is h(t) = h0 + v0*t - g*t^2/2, computed from the arc's start
+  // time so there is no drift from summing small steps.
+  float h0 = NUM_LETTERS;
+  float v0 = 0;
+  unsigned long arcStart = millis();
+  int bounces = 0;
+
+  while (true) {
+    float t = (millis() - arcStart) / 1000.0;
+    float h = h0 + v0 * t - 0.5 * BOUNCE_GRAVITY * t * t;
+
+    if (h <= 0) {
+      float impact = v0 - BOUNCE_GRAVITY * t;  // Negative: moving down
+      v0 = -impact * BOUNCE_RESTITUTION;
+      h0 = 0;
+      arcStart = millis();
+      Serial.print("Bounce #");
+      Serial.println(++bounces);
+      if (v0 * v0 / (2 * BOUNCE_GRAVITY) < BOUNCE_MIN_PEAK) return true;
+      h = 0;
+    }
+
+    int passed = NUM_LETTERS - (int)(h + 0.5);
+    if (passed < 0) passed = 0;
+    uint8_t mask = (1 << passed) - 1;
+    showMask(lighting ? mask : 0x3F & ~mask);
+
+    if (!effectWait(BOUNCE_TICK, 1)) return false;
+  }
+}
+
+// The sign starts dark and a bouncing ball lights it from R to D. With every
+// letter lit it pauses, then a second ball bounces through from R to D the
+// same way, turning the letters off, and the cycle repeats.
 void fallAndBounce() {
   Serial.println("\n=== BOUNCE ANIMATION ===");
 
   while (true) {
     showMask(0);
     if (!effectWait(BOUNCE_HOLD_DARK, 1)) return;
-
-    // Each arc is h(t) = h0 + v0*t - g*t^2/2, computed from the arc's start
-    // time so there is no drift from summing small steps.
-    float h0 = NUM_LETTERS;
-    float v0 = 0;
-    unsigned long arcStart = millis();
-    int bounces = 0;
-
-    while (true) {
-      float t = (millis() - arcStart) / 1000.0;
-      float h = h0 + v0 * t - 0.5 * BOUNCE_GRAVITY * t * t;
-
-      if (h <= 0) {
-        float impact = v0 - BOUNCE_GRAVITY * t;  // Negative: moving down
-        v0 = -impact * BOUNCE_RESTITUTION;
-        h0 = 0;
-        arcStart = millis();
-        Serial.print("Bounce #");
-        Serial.println(++bounces);
-        if (v0 * v0 / (2 * BOUNCE_GRAVITY) < BOUNCE_MIN_PEAK) break;
-        h = 0;
-      }
-
-      int lit = NUM_LETTERS - (int)(h + 0.5);
-      if (lit < 0) lit = 0;
-      showMask((1 << lit) - 1);
-
-      if (!effectWait(BOUNCE_TICK, 1)) return;
-    }
+    if (!bounceDrop(true)) return;
 
     showMask(0x3F);
     if (!effectWait(BOUNCE_HOLD_LIT, 1)) return;
+    if (!bounceDrop(false)) return;
   }
 }
 
