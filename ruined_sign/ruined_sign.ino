@@ -224,24 +224,25 @@ void showMask(uint8_t mask) {
   if (changed) printRuinedState();
 }
 
-// Bounce timing. Heights are in letters: 6 = whole sign lit, 0 = dark.
+// Bounce timing. Heights are in letters above the floor; the floor is the fully lit sign.
 #define BOUNCE_GRAVITY 12.0      // letters/s^2, so the first drop takes 1 s
 #define BOUNCE_RESTITUTION 0.72  // Fraction of speed kept on each bounce
 #define BOUNCE_MIN_PEAK 0.5      // Stop once a bounce would not light a letter
-#define BOUNCE_HOLD_TOP 1500     // Full sign before the drop (ms)
-#define BOUNCE_HOLD_REST 1200    // Dark pause after it settles (ms)
+#define BOUNCE_HOLD_DARK 1200    // Dark sign before the drop (ms)
+#define BOUNCE_HOLD_LIT 2000     // Full sign after it settles (ms)
 #define BOUNCE_TICK 10           // Physics step (ms)
 
-// The lit bar is a ball: the number of letters lit from R is its height.
-// It drops from the top under gravity and loses speed on every bounce, so
-// each hop is lower and quicker, the bar moves fastest near the floor and
-// hangs at the top of each arc.
+// The edge of the lit bar is a ball falling from R toward D. The sign starts
+// dark, the ball drops under gravity lighting letters from R as it falls,
+// and loses speed on every bounce off D, so each hop back toward R is lower
+// and quicker. It moves fastest near the floor, hangs at the top of each arc
+// and settles with the whole sign lit.
 void fallAndBounce() {
   Serial.println("\n=== BOUNCE ANIMATION ===");
 
   while (true) {
-    showMask(0x3F);
-    if (!effectWait(BOUNCE_HOLD_TOP, 1)) return;
+    showMask(0);
+    if (!effectWait(BOUNCE_HOLD_DARK, 1)) return;
 
     // Each arc is h(t) = h0 + v0*t - g*t^2/2, computed from the arc's start
     // time so there is no drift from summing small steps.
@@ -265,15 +266,15 @@ void fallAndBounce() {
         h = 0;
       }
 
-      int lit = (int)(h + 0.5);
-      if (lit > NUM_LETTERS) lit = NUM_LETTERS;
+      int lit = NUM_LETTERS - (int)(h + 0.5);
+      if (lit < 0) lit = 0;
       showMask((1 << lit) - 1);
 
       if (!effectWait(BOUNCE_TICK, 1)) return;
     }
 
-    showMask(0);
-    if (!effectWait(BOUNCE_HOLD_REST, 1)) return;
+    showMask(0x3F);
+    if (!effectWait(BOUNCE_HOLD_LIT, 1)) return;
   }
 }
 
