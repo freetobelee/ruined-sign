@@ -10,7 +10,7 @@
 
 #define NUM_LETTERS 6
 #define MIN_RELAY_DELAY 20  // Minimum time (ms) between relay state changes
-#define NUM_ANIMATIONS 7
+#define NUM_ANIMATIONS 9
 
 int letterPins[NUM_LETTERS] = {R_PIN, U_PIN, I_PIN, N_PIN, E_PIN, D_PIN};
 const char* letters[NUM_LETTERS] = {"R", "U", "I", "N", "E", "D"};
@@ -24,7 +24,6 @@ bool buttonState = HIGH;
 bool lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 unsigned long debounceDelay = 50;
-float gravity = 9.8;
 
 void setup() {
   Serial.begin(9600);
@@ -37,6 +36,8 @@ void setup() {
   Serial.println("5: Chase");
   Serial.println("6: Pulse");
   Serial.println("7: Spell (U RUIN. I RUIN. U R RUIND)");
+  Serial.println("8: RIE / UND");
+  Serial.println("9: Pendulum");
   
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   for (int i = 0; i < NUM_LETTERS; i++) {
@@ -72,6 +73,12 @@ void loop() {
       break;
     case 7:
       spellAnimation();
+      break;
+    case 8:
+      rieUndAnimation();
+      break;
+    case 9:
+      pendulumAnimation();
       break;
   }
 }
@@ -188,81 +195,120 @@ void sequentialFlash() {
   }
 }
 
-void fallAndBounce() {
-  Serial.println("\n=== BOUNCE ANIMATION ===");
-  int delayTime = 50;
-  int height = 100;
-  
-  for (int i = 0; i < NUM_LETTERS; i++) {
-    setRelayState(i, LOW);
-    printRuinedState();
-    delay(delayTime);
-    
+// Wait while still watching the button and serial; returns false if the animation changed
+bool effectWait(unsigned long ms, int anim) {
+  unsigned long start = millis();
+  while (millis() - start < ms) {
     checkButton();
     checkSerial();
-    if (currentAnimation != 1) return;
-  }
-  
-  int bounceCount = 1;
-  for (int bounce = height; bounce > 0; bounce -= gravity) {
-    Serial.print("Bounce #");
-    Serial.println(bounceCount++);
-    
-    for (int i = NUM_LETTERS - 1; i >= 0; i--) {
-      setRelayState(i, HIGH);
-      printRuinedState();
-      delay(delayTime);
-      
-      checkButton();
-      checkSerial();
-      if (currentAnimation != 1) return;
+    if (currentAnimation != anim) {
+      allOff();
+      return false;
     }
-    
-    delayTime = int(delayTime * 1.5);
-    
-    for (int i = 0; i < NUM_LETTERS; i++) {
-      setRelayState(i, LOW);
-      printRuinedState();
-      delay(delayTime);
-      
-      checkButton();
-      checkSerial();
-      if (currentAnimation != 1) return;
+    delay(10);
+  }
+  return true;
+}
+
+// Light exactly the letters whose bits are set in mask (bit 0 = R ... bit 5 = D).
+// Prints only when something actually changed.
+void showMask(uint8_t mask) {
+  bool changed = false;
+  for (int i = 0; i < NUM_LETTERS; i++) {
+    bool state = (mask & (1 << i)) ? LOW : HIGH;
+    if (currentPinStates[i] != state) {
+      setRelayState(i, state);  // May be held back by MIN_RELAY_DELAY; retried next call
+      changed |= currentPinStates[i] == state;
     }
   }
-  
-  for (int i = NUM_LETTERS - 1; i >= 0; i--) {
-    setRelayState(i, HIGH);
-    printRuinedState();
-    delay(delayTime);
+  if (changed) printRuinedState();
+}
+
+// Bounce timing. Heights are in letters above the floor at D.
+#define BOUNCE_GRAVITY 12.0      // letters/s^2, so the first drop takes 1 s
+#define BOUNCE_RESTITUTION 0.72  // Fraction of speed kept on each bounce
+#define BOUNCE_MIN_PEAK 0.5      // Stop once a bounce would not change a letter
+#define BOUNCE_HOLD_DARK 1200    // Dark sign before the drop (ms)
+#define BOUNCE_HOLD_LIT 2000     // Full sign between the two drops (ms)
+#define BOUNCE_TICK 10           // Physics step (ms)
+
+// One drop: a ball falls from R toward D under gravity and loses speed on
+// every bounce off D, so each hop back toward R is lower and quicker. It
+// moves fastest near the floor and hangs at the top of each arc. The letters
+// the ball has passed (from R up to its position) are lit when lighting is
+// true, or dark when it is false. Returns false if the animation changed.
+bool bounceDrop(bool lighting) {
+  // Each arc is h(t) = h0 + v0*t - g*t^2/2, computed from the arc's start
+  // time so there is no drift from summing small steps.
+  float h0 = NUM_LETTERS;
+  float v0 = 0;
+  unsigned long arcStart = millis();
+  int bounces = 0;
+
+  while (true) {
+    float t = (millis() - arcStart) / 1000.0;
+    float h = h0 + v0 * t - 0.5 * BOUNCE_GRAVITY * t * t;
+
+    if (h <= 0) {
+      float impact = v0 - BOUNCE_GRAVITY * t;  // Negative: moving down
+      v0 = -impact * BOUNCE_RESTITUTION;
+      h0 = 0;
+      arcStart = millis();
+      Serial.print("Bounce #");
+      Serial.println(++bounces);
+      if (v0 * v0 / (2 * BOUNCE_GRAVITY) < BOUNCE_MIN_PEAK) return true;
+      h = 0;
+    }
+
+    int passed = NUM_LETTERS - (int)(h + 0.5);
+    if (passed < 0) passed = 0;
+    uint8_t mask = (1 << passed) - 1;
+    showMask(lighting ? mask : 0x3F & ~mask);
+
+    if (!effectWait(BOUNCE_TICK, 1)) return false;
   }
 }
 
+// The sign starts dark and a bouncing ball lights it from R to D. With every
+// letter lit it pauses, then a second ball bounces through from R to D the
+// same way, turning the letters off, and the cycle repeats.
+void fallAndBounce() {
+  Serial.println("\n=== BOUNCE ANIMATION ===");
+
+  while (true) {
+    showMask(0);
+    if (!effectWait(BOUNCE_HOLD_DARK, 1)) return;
+    if (!bounceDrop(true)) return;
+
+    showMask(0x3F);
+    if (!effectWait(BOUNCE_HOLD_LIT, 1)) return;
+    if (!bounceDrop(false)) return;
+  }
+}
+
+// Sparkle timing (ms). Each blink and each gap gets a random length.
+#define SPARKLE_OFF_MIN 40   // Letters dark for 40-70 ms (avg 55)
+#define SPARKLE_OFF_MAX 70
+#define SPARKLE_ON_MIN 90    // Then all lit for 90-350 ms (avg 220)
+#define SPARKLE_ON_MAX 350
+
 void sparkleAnimation() {
   Serial.println("\n=== SPARKLE ANIMATION ===");
-  
-  allOn();  // Start with all letters on
-  
+
+  showMask(0x3F);  // Start with all letters on
+
   while (true) {
-    // Pick 1-3 random letters to sparkle
+    // Blink 1-3 random letters off
+    uint8_t mask = 0x3F;
     int numSparkles = random(1, 4);
     for (int i = 0; i < numSparkles; i++) {
-      int letterIndex = random(0, NUM_LETTERS);
-      setRelayState(letterIndex, HIGH);
+      mask &= ~(1 << random(0, NUM_LETTERS));
     }
-    printRuinedState();
-    delay(50);
-    
-    allOn();
-    printRuinedState();
-    delay(random(100, 300));
-    
-    checkButton();
-    checkSerial();
-    if (currentAnimation != 4) {
-      allOff();
-      return;
-    }
+    showMask(mask);
+    if (!effectWait(random(SPARKLE_OFF_MIN, SPARKLE_OFF_MAX + 1), 4)) return;
+
+    showMask(0x3F);
+    if (!effectWait(random(SPARKLE_ON_MIN, SPARKLE_ON_MAX + 1), 4)) return;
   }
 }
 
@@ -422,6 +468,67 @@ void spellAnimation() {
   }
 }
 
+// RIE / UND flash timing (ms)
+#define RIEUND_ON 545   // How long each half stays lit
+#define RIEUND_GAP 110  // Dark beat between halves
+
+#define MASK_RIE 0x15  // R, I, E
+#define MASK_UND 0x2A  // U, N, D
+
+// Alternates between RIE and UND with a short dark beat between them
+void rieUndAnimation() {
+  Serial.println("\n=== RIE / UND ANIMATION ===");
+
+  while (true) {
+    showMask(MASK_RIE);
+    if (!effectWait(RIEUND_ON, 8)) return;
+    showMask(0);
+    if (!effectWait(RIEUND_GAP, 8)) return;
+    showMask(MASK_UND);
+    if (!effectWait(RIEUND_ON, 8)) return;
+    showMask(0);
+    if (!effectWait(RIEUND_GAP, 8)) return;
+  }
+}
+
+// Pendulum timing
+#define PENDULUM_PERIOD 2.4      // Seconds for one full swing there and back
+#define PENDULUM_DAMPING 0.08    // Per second; higher dies out faster
+#define PENDULUM_MIN_SWING 0.6   // Letters; below this it comes to rest
+#define PENDULUM_REST 1500       // Rest at the bottom before the next push (ms)
+#define PENDULUM_TICK 10         // Physics step (ms)
+
+// A single lit letter swings across the sign like a damped pendulum:
+// x(t) = A * cos(wt) * e^(-damping*t), centred between I and N. It lingers
+// at each end, rushes through the middle and swings a little less each time.
+// Once it settles, IN stays lit for a moment and it gets pushed again from R.
+void pendulumAnimation() {
+  Serial.println("\n=== PENDULUM ANIMATION ===");
+
+  const float center = (NUM_LETTERS - 1) / 2.0;  // 2.5, between I and N
+  const float omega = 2 * PI / PENDULUM_PERIOD;
+
+  while (true) {
+    unsigned long start = millis();
+
+    while (true) {
+      float t = (millis() - start) / 1000.0;
+      float amplitude = center * exp(-PENDULUM_DAMPING * t);
+      if (amplitude < PENDULUM_MIN_SWING) break;
+
+      // Starts at R (x = 0) and swings toward D
+      float x = center - amplitude * cos(omega * t);
+      int pos = (int)(x + 0.5);
+      showMask(1 << pos);
+
+      if (!effectWait(PENDULUM_TICK, 9)) return;
+    }
+
+    showMask((1 << 2) | (1 << 3));  // At rest: I and N
+    if (!effectWait(PENDULUM_REST, 9)) return;
+  }
+}
+
 void checkButton() {
   int reading = digitalRead(BUTTON_PIN);
   
@@ -444,7 +551,7 @@ void checkButton() {
 void checkSerial() {
   if (Serial.available() > 0) {
     char command = Serial.read();
-    if (command >= '1' && command <= '7') {
+    if (command >= '1' && command <= '9') {
       currentAnimation = command - '0';
       printCurrentAnimation();
     }
@@ -474,6 +581,12 @@ void printCurrentAnimation() {
       break;
     case 7:
       Serial.println("Now playing: SPELL ANIMATION");
+      break;
+    case 8:
+      Serial.println("Now playing: RIE / UND ANIMATION");
+      break;
+    case 9:
+      Serial.println("Now playing: PENDULUM ANIMATION");
       break;
   }
   Serial.println("=====================\n");
